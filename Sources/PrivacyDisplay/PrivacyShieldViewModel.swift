@@ -4,13 +4,12 @@ import SwiftUI
 
 @MainActor
 final class PrivacyShieldViewModel: ObservableObject {
-    @Published private(set) var riskState = PrivacyRiskState(score: 0, shouldShield: false, level: .clear, reason: "Idle")
+    @Published private(set) var riskState = PrivacyRiskState(score: 0, shouldShield: false, reason: "Idle")
     @Published private(set) var viewerCount: Int = 0
-    @Published private(set) var potentialObserverCount: Int = 0
 
     private let cameraService: CameraCaptureService
     private let analysisEngine: ViewerAnalysisEngine
-    private var riskEngine: PrivacyRiskEngine
+    private let riskEngine: PrivacyRiskEngine
 
     init(cameraService: CameraCaptureService = CameraCaptureService(),
          analysisEngine: ViewerAnalysisEngine = ViewerAnalysisEngine(),
@@ -27,27 +26,23 @@ final class PrivacyShieldViewModel: ObservableObject {
 
     func stopMonitoring() {
         cameraService.stop()
-        riskState = PrivacyRiskState(score: 0, shouldShield: false, level: .clear, reason: "Monitoring stopped")
+        riskState = PrivacyRiskState(score: 0, shouldShield: false, reason: "Monitoring stopped")
         viewerCount = 0
-        potentialObserverCount = 0
     }
 
     var multitaskingCameraMessage: String {
         cameraService.isMultitaskingSupported
-        ? "Multitasking camera access is supported in this context (still foreground-only for this feature)."
-        : "Multitasking camera access is not supported in this context."
+        ? "Multitasking camera access is supported on this device/context."
+        : "Multitasking camera access is not supported in this device/context."
     }
 }
 
 extension PrivacyShieldViewModel: CameraCaptureServiceDelegate {
     nonisolated func cameraCaptureService(_ service: CameraCaptureService, didOutput sampleBuffer: CMSampleBuffer) {
-        analysisEngine.analyze(sampleBuffer) { result in
+        analysisEngine.analyze(sampleBuffer) { [riskEngine] result in
+            let state = riskEngine.evaluate(result: result)
             Task { @MainActor in
-                var mutableEngine = self.riskEngine
-                let state = mutableEngine.evaluate(result: result)
-                self.riskEngine = mutableEngine
                 self.viewerCount = result.viewerCount
-                self.potentialObserverCount = result.totalPotentialObservers
                 self.riskState = state
             }
         }
@@ -55,7 +50,7 @@ extension PrivacyShieldViewModel: CameraCaptureServiceDelegate {
 
     nonisolated func cameraCaptureService(_ service: CameraCaptureService, didFail error: Error) {
         Task { @MainActor in
-            self.riskState = PrivacyRiskState(score: 1, shouldShield: true, level: .hardShield, reason: "Camera error: \(error.localizedDescription)")
+            self.riskState = PrivacyRiskState(score: 1, shouldShield: true, reason: "Camera error: \(error.localizedDescription)")
         }
     }
 }

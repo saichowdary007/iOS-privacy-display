@@ -1,16 +1,15 @@
 import SwiftUI
 
 struct ContentView: View {
-    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = PrivacyShieldViewModel()
 
     var body: some View {
         ZStack {
             sensitiveDemoContent
-                .blur(radius: blurRadius)
-                .animation(.easeInOut(duration: 0.15), value: viewModel.riskState.level)
+                .blur(radius: viewModel.riskState.shouldShield ? 12 : 0)
+                .animation(.easeInOut(duration: 0.15), value: viewModel.riskState.shouldShield)
 
-            if viewModel.riskState.level == .hardShield {
+            if viewModel.riskState.shouldShield {
                 privacyOverlay
                     .transition(.opacity)
             }
@@ -18,18 +17,6 @@ struct ContentView: View {
         .padding()
         .onAppear { viewModel.startMonitoring() }
         .onDisappear { viewModel.stopMonitoring() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { viewModel.startMonitoring() }
-            else { viewModel.stopMonitoring() }
-        }
-    }
-
-    private var blurRadius: CGFloat {
-        switch viewModel.riskState.level {
-        case .clear: return 0
-        case .softBlur: return 10
-        case .hardShield: return 16
-        }
     }
 
     private var sensitiveDemoContent: some View {
@@ -43,8 +30,7 @@ struct ContentView: View {
 
             Divider()
 
-            Text("Faces detected: \(viewModel.viewerCount)")
-            Text("Potential observers: \(viewModel.potentialObserverCount)")
+            Text("Viewers detected: \(viewModel.viewerCount)")
             Text(String(format: "Risk score: %.2f", viewModel.riskState.score))
             Text(viewModel.riskState.reason)
                 .foregroundStyle(viewModel.riskState.shouldShield ? .red : .green)

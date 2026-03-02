@@ -7,22 +7,6 @@ protocol CameraCaptureServiceDelegate: AnyObject {
     func cameraCaptureService(_ service: CameraCaptureService, didFail error: Error)
 }
 
-enum CameraCaptureError: LocalizedError {
-    case permissionDenied
-    case cameraUnavailable
-    case cannotAddInput
-    case cannotAddOutput
-
-    var errorDescription: String? {
-        switch self {
-        case .permissionDenied: return "Camera permission denied"
-        case .cameraUnavailable: return "Front camera unavailable"
-        case .cannotAddInput: return "Cannot add front camera input"
-        case .cannotAddOutput: return "Cannot add video output"
-        }
-    }
-}
-
 final class CameraCaptureService: NSObject {
     weak var delegate: CameraCaptureServiceDelegate?
 
@@ -37,9 +21,7 @@ final class CameraCaptureService: NSObject {
     func start() async {
         do {
             try await configureSessionIfNeeded()
-            if !session.isRunning {
-                session.startRunning()
-            }
+            session.startRunning()
         } catch {
             delegate?.cameraCaptureService(self, didFail: error)
         }
@@ -56,9 +38,9 @@ final class CameraCaptureService: NSObject {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         if status == .notDetermined {
             let granted = await AVCaptureDevice.requestAccess(for: .video)
-            guard granted else { throw CameraCaptureError.permissionDenied }
+            guard granted else { throw NSError(domain: "CameraCaptureService", code: 1) }
         } else if status != .authorized {
-            throw CameraCaptureError.permissionDenied
+            throw NSError(domain: "CameraCaptureService", code: 2)
         }
 
         session.beginConfiguration()
@@ -67,12 +49,12 @@ final class CameraCaptureService: NSObject {
         session.sessionPreset = .vga640x480
 
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
-            throw CameraCaptureError.cameraUnavailable
+            throw NSError(domain: "CameraCaptureService", code: 3)
         }
 
         let input = try AVCaptureDeviceInput(device: camera)
         guard session.canAddInput(input) else {
-            throw CameraCaptureError.cannotAddInput
+            throw NSError(domain: "CameraCaptureService", code: 4)
         }
         session.addInput(input)
 
@@ -81,16 +63,12 @@ final class CameraCaptureService: NSObject {
         output.setSampleBufferDelegate(self, queue: queue)
 
         guard session.canAddOutput(output) else {
-            throw CameraCaptureError.cannotAddOutput
+            throw NSError(domain: "CameraCaptureService", code: 5)
         }
         session.addOutput(output)
 
         if let connection = output.connection(with: .video), connection.isVideoOrientationSupported {
             connection.videoOrientation = .portrait
-        }
-
-        if session.isMultitaskingCameraAccessSupported {
-            session.isMultitaskingCameraAccessEnabled = true
         }
     }
 }
